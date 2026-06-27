@@ -1,0 +1,199 @@
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import React from 'react';
+import { renderToStream } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
+
+// Styles for the PDF
+const styles = StyleSheet.create({
+  page: { padding: 40, fontFamily: 'Helvetica', fontSize: 12 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 40 },
+  companyName: { fontSize: 24, fontWeight: 'bold', color: '#1f2937' },
+  invoiceTitle: { fontSize: 20, color: '#4f46e5', fontWeight: 'bold' },
+  section: { marginBottom: 20 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  table: { width: '100%', marginTop: 20 },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#f3f4f6', padding: 8, fontWeight: 'bold' },
+  tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', padding: 8 },
+  col1: { width: '50%' },
+  col2: { width: '15%', textAlign: 'right' },
+  col3: { width: '15%', textAlign: 'right' },
+  col4: { width: '20%', textAlign: 'right' },
+  totals: { marginTop: 20, alignSelf: 'flex-end', width: '40%' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  grandTotal: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5, paddingTop: 5, borderTopWidth: 2, borderTopColor: '#1f2937', fontWeight: 'bold' },
+  qrContainer: { marginTop: 40, alignItems: 'center' },
+  qrText: { marginBottom: 10, fontSize: 14, fontWeight: 'bold' },
+  qrImage: { width: 150, height: 150 },
+  footer: { position: 'absolute', bottom: 40, left: 40, right: 40, textAlign: 'center', color: '#6b7280', fontSize: 10 }
+});
+
+const InvoicePDF = ({ invoice, merchant }: { invoice: any, merchant: any }) => (
+  <Document>
+    <Page size="A4" style={styles.page}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.companyName}>{merchant.business_name || 'Business'}</Text>
+          <Text>{merchant.email || ''}</Text>
+        </View>
+        <View>
+          <Text style={styles.invoiceTitle}>INVOICE</Text>
+          <Text>#{invoice.invoice_number}</Text>
+          <Text>Date: {new Date(invoice.created_at).toLocaleDateString()}</Text>
+          <Text>Due: {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'Upon receipt'}</Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Bill To:</Text>
+        <Text>{invoice.contacts?.name || 'Customer'}</Text>
+        <Text>{invoice.contacts?.phone || ''}</Text>
+      </View>
+
+      <View style={styles.table}>
+        <View style={styles.tableHeader}>
+          <Text style={styles.col1}>Description</Text>
+          <Text style={styles.col2}>Qty</Text>
+          <Text style={styles.col3}>Rate</Text>
+          <Text style={styles.col4}>Amount</Text>
+        </View>
+        
+        {invoice.items.map((item: any, i: number) => (
+          <View style={styles.tableRow} key={i}>
+            <Text style={styles.col1}>{item.description}</Text>
+            <Text style={styles.col2}>{item.quantity}</Text>
+            <Text style={styles.col3}>{Number(item.rate).toFixed(2)}</Text>
+            <Text style={styles.col4}>{Number(item.amount).toFixed(2)}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.totals}>
+        <View style={styles.totalRow}>
+          <Text>Subtotal:</Text>
+          <Text>{invoice.currency} {Number(invoice.subtotal).toFixed(2)}</Text>
+        </View>
+        {invoice.tax_amount > 0 && (
+          <View style={styles.totalRow}>
+            <Text>Tax ({invoice.tax_rate}%):</Text>
+            <Text>{invoice.currency} {Number(invoice.tax_amount).toFixed(2)}</Text>
+          </View>
+        )}
+        <View style={styles.grandTotal}>
+          <Text>Total:</Text>
+          <Text>{invoice.currency} {Number(invoice.total).toFixed(2)}</Text>
+        </View>
+      </View>
+
+      {invoice.payment_qr_string && (
+        <View style={styles.qrContainer}>
+          <Text style={styles.qrText}>Scan to Pay</Text>
+          {/* Note: React-PDF doesn't natively render QR strings, it needs a base64 image or a URL. 
+              The qr_string must be a base64 image data URI for <Image src={...} /> to work.
+              If it's a raw EMVCo string, we need to convert it to an image first. 
+              Assuming it's a base64 image for now. */}
+          <Image src={invoice.payment_qr_string} style={styles.qrImage} />
+        </View>
+      )}
+
+      {invoice.notes && (
+        <View style={{ marginTop: 30 }}>
+          <Text style={{ fontWeight: 'bold' }}>Notes:</Text>
+          <Text>{invoice.notes}</Text>
+        </View>
+      )}
+
+      <Text style={styles.footer}>
+        Thank you for your business! Generated by Torcia AI.
+      </Text>
+    </Page>
+  </Document>
+);
+
+// Stream to Buffer helper
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    stream.on('error', (err) => reject(err));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { invoiceId } = await req.json();
+    
+    if (!invoiceId) {
+      return NextResponse.json({ success: false, message: "Missing invoiceId" }, { status: 400 });
+    }
+
+    // 1. Fetch Invoice
+    const { data: invoice, error: invoiceErr } = await supabaseAdmin
+      .from('invoices')
+      .select('*, contacts(name, phone)')
+      .eq('id', invoiceId)
+      .single();
+
+    if (invoiceErr || !invoice) {
+      return NextResponse.json({ success: false, message: "Invoice not found" }, { status: 404 });
+    }
+
+    // 2. Fetch Merchant
+    const { data: merchant, error: merchantErr } = await supabaseAdmin
+      .from('merchants')
+      .select('*')
+      .eq('id', invoice.merchant_id)
+      .single();
+
+    if (merchantErr || !merchant) {
+      return NextResponse.json({ success: false, message: "Merchant not found" }, { status: 404 });
+    }
+
+    // 3. Render PDF
+    const pdfStream = await renderToStream(<InvoicePDF invoice={invoice} merchant={merchant} />);
+    const pdfBuffer = await streamToBuffer(pdfStream);
+
+    // 4. Ensure bucket exists
+    const bucketName = 'invoices';
+    try {
+      await supabaseAdmin.storage.getBucket(bucketName);
+    } catch {
+      await supabaseAdmin.storage.createBucket(bucketName, { public: true });
+    }
+
+    // 5. Upload to Supabase Storage
+    const fileName = `${merchant.id}/${invoice.invoice_number}-${Date.now()}.pdf`;
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(bucketName)
+      .upload(fileName, pdfBuffer, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error("PDF Upload Error:", uploadError);
+      return NextResponse.json({ success: false, message: "Failed to save PDF" }, { status: 500 });
+    }
+
+    // 6. Get Public URL
+    const { data: { publicUrl } } = supabaseAdmin.storage
+      .from(bucketName)
+      .getPublicUrl(fileName);
+
+    // 7. Update Invoice Record
+    await supabaseAdmin
+      .from('invoices')
+      .update({ pdf_url: publicUrl })
+      .eq('id', invoiceId);
+
+    return NextResponse.json({
+      success: true,
+      pdfUrl: publicUrl
+    });
+
+  } catch (error: any) {
+    console.error("Invoice Generation Error:", error.message);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}
