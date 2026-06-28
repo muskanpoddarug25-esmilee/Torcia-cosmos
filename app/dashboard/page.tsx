@@ -78,7 +78,7 @@ export default function DashboardOverviewPage() {
       setTimeSavedText(hoursSaved > 0 ? `${hoursSaved}h ${minutesSaved}m saved` : `${minutesSaved}m saved`)
 
       // Active Orders
-      const { count: ordCount } = await supabase.from('orders').select('*', { count: 'exact', head: true }).eq('merchant_id', merchant.id).neq('status', 'delivered').neq('status', 'cancelled')
+      const { count: ordCount } = await supabase.from('orders').select('*', { count: 'exact', head: true }).eq('merchant_id', merchant.id).in('status', ['paid', 'pending'])
       setActiveOrders(ordCount || 0)
 
       // Escalated Chats Count

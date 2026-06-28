@@ -34,6 +34,24 @@ export async function POST(request: Request) {
     const signature = request.headers.get('x-hub-signature-256')
     const appSecret = process.env.META_APP_SECRET
 
+    // --- ALWAYS log the raw payload first ---
+    let parsedBody: any = null
+    try {
+      parsedBody = JSON.parse(rawBody)
+    } catch {}
+    console.log("[WEBHOOK] --------------------------------------------------")
+    console.log("[WEBHOOK] Incoming POST to /api/webhook/whatsapp")
+    console.log("[WEBHOOK] Signature header:", signature ? "present" : "MISSING")
+    if (parsedBody) {
+      console.log("[WEBHOOK] Payload object:", parsedBody.object)
+      const entry = parsedBody.entry?.[0]
+      const changes = entry?.changes?.[0]
+      const value = changes?.value
+      console.log("[WEBHOOK] Phone number ID from payload:", value?.metadata?.phone_number_id)
+      console.log("[WEBHOOK] Message count:", value?.messages?.length || 0)
+      console.log("[WEBHOOK] Change field:", changes?.field)
+    }
+
     if (!appSecret) {
       console.error("[WEBHOOK] Missing META_APP_SECRET! Cannot verify signature.");
       return new NextResponse("Server Configuration Error", { status: 500 })
@@ -46,15 +64,19 @@ export async function POST(request: Request) {
 
     const crypto = await import('crypto')
     const expectedSignature = "sha256=" + crypto.createHmac('sha256', appSecret).update(rawBody, 'utf-8').digest('hex')
+
     if (signature !== expectedSignature) {
       console.warn("[WEBHOOK] Signature mismatch! Rejecting request.")
       return new NextResponse("Invalid Signature", { status: 401 })
     }
 
     const body = JSON.parse(rawBody)
+    console.log(`[WEBHOOK] --------------------------------------------------`)
+    console.log(`[WEBHOOK] Incoming WhatsApp message`)
 
     // Validate Meta Webhook Payload
     if (body.object !== "whatsapp_business_account") {
+      console.warn("[WEBHOOK] Rejected: object is not whatsapp_business_account")
       return new NextResponse("Not a WhatsApp Webhook", { status: 404 })
     }
 
@@ -64,6 +86,7 @@ export async function POST(request: Request) {
 
     if (!value || !value.messages || value.messages.length === 0) {
       // Not a message event (could be status update, etc)
+      console.log("[WEBHOOK] No messages array in payload. Event type (if any):", value?.statuses ? "status update" : "other")
       return new NextResponse("EVENT_RECEIVED", { status: 200 })
     }
 
@@ -121,15 +144,17 @@ export async function POST(request: Request) {
       .eq('platform', 'whatsapp')
       .single()
 
+    console.log("[WEBHOOK] Integration lookup result:", integration ? `found merchant ${integration.merchant_id}` : "NOT FOUND")
+
     let merchantId = integration?.merchant_id
     let accessToken = integration?.access_token
 
     if (!integration) {
-      console.warn(`No integration found for phone_number_id: ${phoneNumberId}. Rejecting webhook.`)
+      console.warn(`[WEBHOOK] No integration found for phone_number_id: ${phoneNumberId}. Please link WhatsApp in dashboard.`)
       return new NextResponse("Integration not found", { status: 404 })
     }
 
-    // Always use .env token for local testing if matched merchant is configured for it
+    // Use env token if matching phone number
     if (process.env.META_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID === phoneNumberId) {
       accessToken = process.env.META_ACCESS_TOKEN
     }
@@ -152,7 +177,7 @@ export async function POST(request: Request) {
     // 2. Upsert Contact
     let { data: contact } = await supabase
       .from('contacts')
-      .select('id')
+      .select('id, name')
       .eq('merchant_id', merchantId)
       .eq('phone', customerPhone)
       .single()
@@ -221,7 +246,13 @@ export async function POST(request: Request) {
     }
 
     // 4. Save Customer Message
-    await supabase.from('messages').insert({
+    if (!conversation) {
+      console.error("[WEBHOOK] Failed to resolve conversation")
+      return new NextResponse("Internal Server Error - Conversation missing", { status: 500 })
+    }
+
+    console.log(`[WEBHOOK] Saving message from ${customerPhone} to conversation ${conversation.id}, merchant ${merchantId}`)
+    const { error: msgInsertErr } = await supabase.from('messages').insert({
       conversation_id: conversation.id,
       merchant_id: merchantId,
       contact_id: contact.id,
@@ -234,6 +265,13 @@ export async function POST(request: Request) {
       platform_message_id: message.id
     })
 
+    if (msgInsertErr) {
+      console.error("[WEBHOOK] Failed to save customer message:", msgInsertErr)
+      return new NextResponse("Failed to save message", { status: 500 })
+    }
+
+    console.log(`[WEBHOOK] Message saved successfully`)
+
     // 5. Generate AI Response if status is ai_handling or active
     if (conversation.status === 'ai_handling' || conversation.status === 'active') {
       try {
@@ -241,12 +279,15 @@ export async function POST(request: Request) {
         const [
           { data: settings },
           { data: products },
-          { data: pastMessages }
+          { data: pastMessages },
+          { data: merchantInfo }
         ] = await Promise.all([
           supabase.from('merchant_settings').select('ai_system_prompt').eq('merchant_id', merchantId).single(),
           supabase.from('products').select('name, price, description, in_stock, product_tag, image_url').eq('merchant_id', merchantId),
-          supabase.from('messages').select('sender_type, content, message_type').eq('conversation_id', conversation.id).order('created_at', { ascending: false }).limit(10)
+          supabase.from('messages').select('sender_type, content, message_type').eq('conversation_id', conversation.id).order('created_at', { ascending: false }).limit(10),
+          supabase.from('merchants').select('business_name').eq('id', merchantId).single()
         ]);
+        const storeName = merchantInfo?.business_name || 'this store';
         // Parse settings JSON
         let storeContext = "";
         let customPromptStr = settings?.ai_system_prompt || "";
@@ -293,16 +334,16 @@ ${customPromptStr}
 `;
         }
 
-        const dbPrompt = `You are Torcia AI, a strict, data-oriented AI sales assistant for a Nepali retail store.\n${storeContext}`;
+        const dbPrompt = `You are Torcia AI, a strict, data-oriented AI sales assistant for a Nepali retail store called "${storeName}".\n${storeContext}`;
         console.log("=== AI SYSTEM PROMPT ===", dbPrompt);
         // Debug prompt dump removed for security
         const strictRules = `
 SYSTEM PERSONA:
-You are Torcia AI, an incredibly polite, warm, and helpful digital shopkeeper working for this retail store {store name} in Nepal. You speak with a natural, humanoid Nepali shopkeeper tone. You are respectful, gentle, and use terms like "Hajur" to show respect to the customer. Never sound like a robotic AI.
+You are Torcia AI, an incredibly polite, warm, and helpful digital shopkeeper working for ${storeName} in Nepal. You speak with a natural, humanoid Nepali shopkeeper tone. You are respectful, gentle, and use terms like "Hajur" to show respect to the customer. Never sound like a robotic AI.
 CRITICAL: You must ALWAYS prioritize the STORE PROFILE above. If anything you said in the previous chat history contradicts the current STORE PROFILE (e.g., about delivery locations or products), you MUST correct yourself and follow the current STORE PROFILE.
 
 GREETING PATTERN:
-When a user says hello or greets you, you MUST reply warmly using this exact structure: "Namaste! Hajur, I am Torcia AI and I work for this store. Tapailai aja ma kasari sahayog garna sakchhu?"
+When a user says hello or greets you, you MUST reply warmly using this exact structure: "Namaste! Hajur, ma Torcia AI hun ra ma ${storeName} ma kaam garchhu. Tapailai kasari sahayog garna sakchhu?"
 
 PRODUCT INQUIRY PATTERN:
 When a customer asks generally "What do you sell?" or "What is your business?", use the STORE PROFILE and CUSTOM INSTRUCTIONS to describe your offerings in a natural way. Do NOT just list random items from the catalog.
@@ -485,14 +526,19 @@ $$JSON: {"name": "Customer Name", "phone": "Phone Number", "address": "Address"}
           apiKey: process.env.NVIDIA_API_KEY || process.env.NVIDIA_VISION_API_KEY,
         });
 
-        // Rate limit check for AI Message
-        const { checkAndIncrementUsage } = await import('@/lib/usage')
-        const canUseAI = await checkAndIncrementUsage(merchantId, 'ai_message')
-        
-        let aiReplyText = "I'm sorry, the store has reached its AI message limit for this month. Please wait for a human agent to respond."
-        let shouldEscalate = !canUseAI
+        // Log usage (non-blocking)
+        try {
+          const { checkAndIncrementUsage } = await import('@/lib/usage')
+          await checkAndIncrementUsage(merchantId, 'ai_message')
+        } catch (usageErr) {
+          console.warn("[WEBHOOK] Usage logging failed:", usageErr)
+        }
 
-        if (canUseAI) {
+        // Call AI with product context
+        let aiReplyText = "Namaste! Hajur, ma Torcia AI hun. Tapailai kasari sahayog garna sakchhu?"
+        let shouldEscalate = false
+
+        try {
           const aiResponse = await openai.chat.completions.create({
             model: process.env.AI_MODEL || "openai/gpt-oss-120b",
             messages: [
@@ -513,15 +559,17 @@ $$JSON: {"name": "Customer Name", "phone": "Phone Number", "address": "Address"}
             shouldEscalate = true
             aiReplyText = aiReplyText.replace(/\[HANDOFF\]/g, '').trim()
           }
+        } catch (aiErr) {
+          console.error("[WEBHOOK] AI call failed:", aiErr)
         }
 
         // Check for Data Extraction JSON
-        const jsonMatch = aiReplyText.match(/\$\$JSON:\s*(\{.*?\})\$\$/s) || aiReplyText.match(/\$\$JSON:\s*(\{.*?\})/s);
+        const jsonMatch = aiReplyText.match(/\$\$JSON:\s*(\{[\s\S]*?\})\$\$/) || aiReplyText.match(/\$\$JSON:\s*(\{[\s\S]*?\})/);
         if (jsonMatch) {
           try {
             const extractedData = JSON.parse(jsonMatch[1]);
             // Remove the JSON block from the reply text
-            aiReplyText = aiReplyText.replace(/\$\$JSON:\s*\{.*?\}\$\$/s, '').replace(/\$\$JSON:\s*\{.*?\}/s, '').trim();
+            aiReplyText = aiReplyText.replace(/\$\$JSON:\s*\{[\s\S]*?\}\$\$/, '').replace(/\$\$JSON:\s*\{[\s\S]*?\}/, '').trim();
 
             // Update contact profile (never update phone to avoid breaking WhatsApp linkage)
             const updates: any = {};
@@ -595,7 +643,7 @@ $$JSON: {"name": "Customer Name", "phone": "Phone Number", "address": "Address"}
                       customer_name: contact.name || customerPhone,
                       customer_phone: customerPhone,
                       platform: 'whatsapp',
-                      status: 'pending_payment',
+                      status: 'pending',
                       amount: Number(amount),
                       currency: 'NPR',
                       items: [{ name: 'Order via WhatsApp AI', quantity: 1, price: Number(amount) }],

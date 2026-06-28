@@ -1,15 +1,10 @@
-import { paymentWorker } from './payment-verify';
 import { abandonedCartWorker } from './abandoned-cart';
+import { startExpirySweep, stopExpirySweep } from './expiry-sweep';
 
-console.log('[BULLMQ] Starting background workers...');
+console.log('[WORKERS] Starting background workers...');
 
-paymentWorker.on('completed', job => {
-  console.log(`[BULLMQ] Job ${job.id} completed successfully`);
-});
-
-paymentWorker.on('failed', (job, err) => {
-  console.log(`[BULLMQ] Job ${job?.id} failed with ${err.message}`);
-});
+// Start the local expiry sweep (runs every 5 min, expires stale pending_payment orders)
+startExpirySweep();
 
 abandonedCartWorker.on('completed', job => {
   console.log(`[BULLMQ] Cart check ${job.id} completed`);
@@ -21,8 +16,15 @@ abandonedCartWorker.on('failed', (job, err) => {
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('[BULLMQ] Shutting down workers...');
-  await paymentWorker.close();
+  console.log('[WORKERS] Shutting down workers...');
+  stopExpirySweep();
+  await abandonedCartWorker.close();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('[WORKERS] Shutting down workers (SIGINT)...');
+  stopExpirySweep();
   await abandonedCartWorker.close();
   process.exit(0);
 });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,8 +41,9 @@ export async function POST(req: NextRequest) {
 
     let accessToken = process.env.META_ACCESS_TOKEN || integration?.access_token
     let phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || integration?.platform_id
+    let pageAccessToken = process.env.META_PAGE_ACCESS_TOKEN || integration?.access_token
 
-    // 3. Send via WhatsApp API
+    // 3. Send via platform-specific API
     if (platform === "whatsapp" && customerPhone && accessToken && phoneNumberId) {
       console.log(`[SEND] Sending message from dashboard to ${customerPhone} via ${phoneNumberId}`)
 
@@ -65,10 +66,31 @@ export async function POST(req: NextRequest) {
 
       if (metaResult.error) {
         console.error(`[SEND] Meta API error:`, metaResult.error)
-        // Still save to DB even if delivery fails
+      }
+    } else if (platform === "messenger" && pageAccessToken) {
+      // Messenger: use PSID as recipient
+      const recipientId = body.platform_customer_id || conversation.contact?.platform_user_id || conversation.contact?.phone
+      console.log(`[SEND] Sending Messenger message to PSID ${recipientId}`)
+
+      const messengerRes = await fetch(`https://graph.facebook.com/v18.0/me/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${pageAccessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          recipient: { id: recipientId },
+          message: { text: content },
+        }),
+      })
+
+      const messengerResult = await messengerRes.json()
+      console.log(`[SEND] Messenger API response:`, JSON.stringify(messengerResult))
+
+      if (messengerResult.error) {
+        console.error(`[SEND] Messenger API error:`, messengerResult.error)
       }
     } else if (platform === "instagram" && customerPhone && accessToken) {
-      // Future Instagram routing support
       console.log(`[SEND] Instagram routing not fully implemented, but requested for ${customerPhone}`)
     }
 

@@ -9,18 +9,18 @@ When developing locally, your server runs on `localhost:3000`. External services
 1. Install Ngrok: `npm install -g ngrok` (or download from ngrok.com)
 2. Start the tunnel:
    ```bash
-   ngrok http 3000 --domain=gentleman-custard-observant.ngrok-free.dev
+   ngrok http 3000 --domain=elastic-octane-swimsuit.ngrok-free.dev
    ```
    *(Note: Using a static domain prevents you from having to update Meta Developer console every time you restart Ngrok)*
 
-3. Verify: Your local app is now accessible at `https://gentleman-custard-observant.ngrok-free.dev`
+3. Verify: Your local app is now accessible at `https://elastic-octane-swimsuit.ngrok-free.dev`
 
 ## 2. Meta App Configuration
 
 1. Go to **Meta Developer Dashboard** -> Your App -> WhatsApp -> Configuration
 2. Edit the **Callback URL** to point to your ngrok URL:
-   `https://gentleman-custard-observant.ngrok-free.dev/api/webhook/whatsapp`
-3. Enter the **Verify Token**: `katalio_secret_token_123` (This must match `NEXT_PUBLIC_WHATSAPP_VERIFY_TOKEN` in `.env.local`)
+   `https://elastic-octane-swimsuit.ngrok-free.dev/api/webhook/whatsapp`
+3. Enter the **Verify Token**: `katalio_webhook_verify_2024` (This must match `META_VERIFY_TOKEN` in `.env`)
 4. Manage Webhook Fields: Subscribe to `messages`.
 
 ## 3. Production Deployment

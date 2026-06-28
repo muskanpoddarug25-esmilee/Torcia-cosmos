@@ -49,11 +49,12 @@ export async function POST(req: NextRequest) {
       accessToken = creds.access_token
     }
 
-    const qrString = await generateNepalPayQR(merchantId || "default", finalUsername, finalPassword, amount, remarks || "Order Payment", accessToken)
+    const { qrString, validationTraceId } = await generateNepalPayQR(merchantId || "default", finalUsername, finalPassword, amount, remarks || "Order Payment", accessToken)
 
     return NextResponse.json({
       success: true,
       qrString,
+      validationTraceId
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error"

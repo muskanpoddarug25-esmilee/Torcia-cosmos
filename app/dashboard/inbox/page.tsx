@@ -21,7 +21,7 @@ const CHANNELS: { key: Channel; label: string; iconUrl: string; comingSoon?: boo
   { key: "all", label: "All Channels", iconUrl: "", connected: true },
   { key: "whatsapp", label: "WhatsApp", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg", connected: true },
   { key: "instagram", label: "Instagram", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg", connected: false },
-  { key: "messenger", label: "Messenger", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/b/be/Facebook_Messenger_logo_2020.svg", connected: false },
+  { key: "messenger", label: "Messenger", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/b/be/Facebook_Messenger_logo_2020.svg", connected: true },
   { key: "tiktok", label: "TikTok", iconUrl: "https://upload.wikimedia.org/wikipedia/en/a/a9/TikTok_logo.svg", connected: false },
   { key: "gmail", label: "Gmail", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg", connected: false },
 ]
@@ -143,7 +143,7 @@ export default function InboxPage() {
       if (selectedChat.contact?.id) {
         supabase.from('tickets').select('*').eq('contact_id', selectedChat.contact.id).order('created_at', { ascending: false })
           .then(({ data }) => setCustomerTickets(data || []))
-        supabase.from('orders').select('*').eq('customer_phone', selectedChat.contact.phone).order('created_at', { ascending: false })
+        supabase.from('orders').select('*').eq('contact_id', selectedChat.contact.id).order('created_at', { ascending: false })
           .then(({ data }) => setCustomerOrders(data || []))
       }
     } else {
@@ -299,8 +299,65 @@ export default function InboxPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-7rem)] items-center justify-center">
-        <Loader2 className="w-8 h-8 text-[#6366F1] animate-spin" />
+      <div className="flex h-[calc(100vh-8rem)] gap-4 overflow-hidden animate-in fade-in duration-500">
+        {/* Column 1 */}
+        <div className="w-[220px] flex-shrink-0 flex flex-col gap-4">
+          <div className="bg-white rounded-[24px] p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex-1 flex flex-col">
+            <div className="w-32 h-5 bg-slate-200 rounded animate-pulse mb-6"></div>
+            <div className="space-y-3 mb-8">
+              {[1, 2, 3, 4].map(i => <div key={i} className="w-full h-10 bg-slate-100 rounded-2xl animate-pulse"></div>)}
+            </div>
+            <div className="w-16 h-3 bg-slate-200 rounded animate-pulse mb-4"></div>
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <div key={i} className="w-full h-10 bg-slate-100 rounded-2xl animate-pulse"></div>)}
+            </div>
+          </div>
+        </div>
+        {/* Column 2 */}
+        <div className="w-[300px] flex-shrink-0 flex flex-col bg-white rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+          <div className="p-4 border-b border-slate-100">
+            <div className="flex justify-between items-center mb-4">
+              <div className="w-24 h-5 bg-slate-200 rounded animate-pulse"></div>
+              <div className="w-8 h-8 bg-slate-100 rounded-full animate-pulse"></div>
+            </div>
+            <div className="w-full h-8 bg-slate-50 rounded-xl animate-pulse"></div>
+          </div>
+          <div className="flex-1 p-3 space-y-2">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="w-full p-3 flex gap-3">
+                <div className="w-10 h-10 rounded-full bg-slate-200 flex-shrink-0 animate-pulse"></div>
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="flex justify-between">
+                    <div className="w-24 h-3 bg-slate-200 rounded animate-pulse"></div>
+                    <div className="w-10 h-2 bg-slate-100 rounded animate-pulse"></div>
+                  </div>
+                  <div className="w-full h-3 bg-slate-100 rounded animate-pulse"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Column 3 */}
+        <div className="flex-1 flex flex-col bg-white rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+          <div className="h-16 px-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-slate-200 animate-pulse"></div>
+              <div className="space-y-2">
+                <div className="w-32 h-4 bg-slate-200 rounded animate-pulse"></div>
+                <div className="w-24 h-3 bg-slate-100 rounded animate-pulse"></div>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-slate-100 animate-pulse"></div>
+          </div>
+          <div className="flex-1 bg-[#FAFAFA] p-6 flex flex-col gap-6 justify-end">
+            <div className="self-end w-64 h-16 bg-slate-200 rounded-3xl rounded-tr-sm animate-pulse"></div>
+            <div className="self-start w-72 h-20 bg-slate-200 rounded-3xl rounded-tl-sm animate-pulse"></div>
+            <div className="self-end w-48 h-12 bg-slate-200 rounded-3xl rounded-tr-sm animate-pulse"></div>
+          </div>
+          <div className="p-4 border-t border-slate-100">
+            <div className="w-full h-12 bg-slate-50 rounded-[20px] animate-pulse"></div>
+          </div>
+        </div>
       </div>
     )
   }

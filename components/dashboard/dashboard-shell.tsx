@@ -82,6 +82,21 @@ export function DashboardSidebar({ isCollapsed, onToggle }: { isCollapsed?: bool
   const supabase = createClient()
   const { merchant, tier, role, user } = useMerchant()
   const [localCollapsed, setLocalCollapsed] = useState(false)
+  const [showUpgradeBadge, setShowUpgradeBadge] = useState(true)
+
+  React.useEffect(() => {
+    const hiddenUntil = localStorage.getItem("hide_upgrade_badge_until")
+    if (hiddenUntil && Date.now() < parseInt(hiddenUntil, 10)) {
+      setShowUpgradeBadge(false)
+    }
+  }, [])
+
+  const handleHideBadge = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const until = Date.now() + 24 * 60 * 60 * 1000 // 24 hours from now
+    localStorage.setItem("hide_upgrade_badge_until", until.toString())
+    setShowUpgradeBadge(false)
+  }
   
   const collapsed = isCollapsed !== undefined ? isCollapsed : localCollapsed
   const handleToggle = () => {
@@ -209,10 +224,10 @@ export function DashboardSidebar({ isCollapsed, onToggle }: { isCollapsed?: bool
       {/* Bottom Section */}
       <div className="px-4 py-6 mt-auto">
         {/* Subscription Badge */}
-        {!collapsed && tier && !localCollapsed && (
+        {!collapsed && tier && showUpgradeBadge && (
           <div className="mb-6 relative p-4 rounded-2xl bg-gradient-to-br from-[#F3E8FF] to-[#E0E7FF] border border-[#E0E7FF] shadow-sm">
             <button 
-              onClick={(e) => { e.stopPropagation(); setLocalCollapsed(true); }}
+              onClick={handleHideBadge}
               className="absolute top-2 right-2 p-1 text-[#6366F1]/50 hover:text-[#6366F1] rounded-lg transition-colors hover:bg-white/50"
               title="Hide"
             >

@@ -109,8 +109,51 @@ export default function OrdersPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-7rem)] items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-3">
+            <div className="w-32 h-8 bg-slate-200 rounded-lg animate-pulse"></div>
+            <div className="w-24 h-4 bg-slate-100 rounded-md animate-pulse"></div>
+          </div>
+          <div className="w-full sm:w-80 h-10 bg-slate-100 rounded-lg animate-pulse"></div>
+        </div>
+        <div className="grid grid-cols-5 gap-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="p-4 rounded-xl bg-white border border-slate-100 shadow-sm">
+              <div className="w-24 h-4 bg-slate-100 rounded animate-pulse mb-3"></div>
+              <div className="w-12 h-7 bg-slate-200 rounded animate-pulse mb-2"></div>
+              <div className="w-20 h-3 bg-slate-50 rounded animate-pulse"></div>
+            </div>
+          ))}
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="rounded-2xl bg-white border border-slate-100 shadow-sm overflow-hidden h-[140px] flex">
+              <div className="w-32 h-full bg-slate-100 animate-pulse flex-shrink-0"></div>
+              <div className="flex-1 p-4 flex gap-6">
+                <div className="flex-1 space-y-3 pt-2">
+                  <div className="w-24 h-4 bg-slate-200 rounded animate-pulse"></div>
+                  <div className="w-48 h-5 bg-slate-200 rounded animate-pulse"></div>
+                  <div className="w-32 h-4 bg-slate-100 rounded animate-pulse"></div>
+                </div>
+                <div className="w-56 border-l border-slate-50 pl-6 space-y-3 pt-2">
+                  <div className="w-20 h-3 bg-slate-200 rounded animate-pulse"></div>
+                  <div className="w-full h-4 bg-slate-100 rounded animate-pulse"></div>
+                  <div className="w-3/4 h-4 bg-slate-100 rounded animate-pulse"></div>
+                </div>
+                <div className="w-48 border-l border-slate-50 pl-6 space-y-3 pt-2">
+                  <div className="w-20 h-3 bg-slate-200 rounded animate-pulse"></div>
+                  <div className="w-16 h-5 bg-slate-100 rounded animate-pulse"></div>
+                  <div className="w-24 h-6 bg-slate-200 rounded animate-pulse mt-4"></div>
+                </div>
+                <div className="w-44 bg-slate-50/50 -my-4 -mr-4 p-4 border-l border-slate-50 flex flex-col justify-between items-end">
+                  <div className="w-24 h-7 bg-slate-200 rounded-full animate-pulse"></div>
+                  <div className="w-full h-8 bg-slate-200 rounded-lg animate-pulse mb-1"></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -195,7 +238,9 @@ export default function OrdersPage() {
                 <div className="flex items-stretch">
                   {/* Product Image */}
                   <div className="w-32 min-h-[140px] flex-shrink-0 bg-gray-100 border-r border-gray-200 overflow-hidden flex flex-col">
-                    {order.product_image_url ? (
+                    {order.items && order.items[0] && order.items[0].image_url ? (
+                      <img src={order.items[0].image_url} alt="Product" className="w-full h-full object-cover" />
+                    ) : order.product_image_url ? (
                       <img src={order.product_image_url} alt="Product" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center flex-1">

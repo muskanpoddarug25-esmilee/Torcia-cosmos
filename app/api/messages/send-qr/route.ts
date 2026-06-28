@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     // Dynamic import to avoid crypto issues on edge
     const { decrypt } = await import('@/lib/crypto')
-    const { generateNepalPayQR } = await import('@/lib/nepalpay')
+    const { schedulePaymentPolling, scheduleExpiryFallback } = await import('@/lib/qstash')
     
     const username = decrypt(creds.encrypted_username)
     const password = decrypt(creds.encrypted_password)
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         customer_name: conversation.contact?.name || customerPhone,
         customer_phone: customerPhone,
         platform,
-        status: 'pending_payment',
+        status: 'pending',
         amount: Number(amount),
         currency: 'NPR',
         items: [{ name: remarks || 'Order via Manual QR', quantity: 1, price: Number(amount) }],
@@ -99,12 +99,36 @@ export async function POST(req: NextRequest) {
       if (!orderErr && newOrder) {
         createdOrderId = newOrder.id
         
-        // Start background polling
+        // Start QStash background polling (self-scheduling, 15s intervals, 20 attempts = 5 min)
         if (validationTraceId) {
-          const { startPaymentPolling } = await import('@/lib/nepalpay-polling')
-          // Since we need session cookies for polling, we pass the username/password to proxy via startPaymentPolling
-          // Wait, startPaymentPolling needs to be updated to take username/password instead of sessionCookies!
-          startPaymentPolling(validationTraceId, username, password, newOrder.id, merchantId, customerPhone, conversation.id)
+          try {
+            await schedulePaymentPolling(
+              newOrder.id,
+              validationTraceId,
+              username,
+              password,
+              merchantId,
+              customerPhone,
+              conversation.id
+            )
+          } catch (qstashErr: any) {
+            console.error('[QSTASH] Failed to schedule polling:', qstashErr.message)
+          }
+
+          // Schedule Layer 2 expiry fallback (fires at 6 min)
+          try {
+            await scheduleExpiryFallback(
+              newOrder.id,
+              validationTraceId,
+              username,
+              password,
+              merchantId,
+              customerPhone,
+              conversation.id
+            )
+          } catch (qstashErr: any) {
+            console.error('[QSTASH] Failed to schedule expiry fallback:', qstashErr.message)
+          }
         }
       }
     } catch (orderCreateErr: any) {

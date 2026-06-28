@@ -51,8 +51,46 @@ export default function ContactsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-7rem)] items-center justify-center">
-        <Loader2 className="w-8 h-8 text-[#6366F1] animate-spin" />
+      <div className="max-w-6xl mx-auto pb-12 animate-in fade-in duration-500">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+          <div className="space-y-3">
+            <div className="w-48 h-10 bg-slate-200 rounded-lg animate-pulse"></div>
+            <div className="w-64 h-5 bg-slate-100 rounded-md animate-pulse"></div>
+          </div>
+          <div className="w-full md:w-96 h-12 bg-slate-100 rounded-2xl animate-pulse"></div>
+        </div>
+        <div className="bg-white rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 border-b border-slate-100">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <th key={i} className="py-4 px-6"><div className="w-20 h-4 bg-slate-200 rounded animate-pulse"></div></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <tr key={i}>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-200 animate-pulse"></div>
+                        <div className="space-y-2">
+                          <div className="w-32 h-4 bg-slate-200 rounded animate-pulse"></div>
+                          <div className="w-24 h-3 bg-slate-100 rounded animate-pulse"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6"><div className="w-28 h-4 bg-slate-100 rounded animate-pulse"></div></td>
+                    <td className="py-4 px-6"><div className="w-40 h-4 bg-slate-100 rounded animate-pulse"></div></td>
+                    <td className="py-4 px-6"><div className="w-16 h-6 bg-slate-100 rounded-lg animate-pulse"></div></td>
+                    <td className="py-4 px-6 text-right"><div className="w-8 h-8 bg-slate-100 rounded-xl animate-pulse ml-auto"></div></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     )
   }

@@ -125,12 +125,10 @@ const server = http.createServer(async (req, res) => {
                 
                 const qrPayload = {
                     merchantCode,
-                    storeLabel: "",
-                    terminal: "",
+                    storeLabel: "Store1",
+                    terminal: "Terminal1",
                     amount: parseInt(amount),
-                    // We append a random short ID to remarks to guarantee uniqueness. 
-                    // This prevents banking apps (like Khalti) from blocking it as a "duplicate transaction".
-                    remarks: (remarks || "Order") + " " + Math.random().toString(36).substring(2, 8).toUpperCase(),
+                    remarks: ((remarks || "Order").substring(0, 10) + " " + Math.random().toString(36).substring(2, 6)).toUpperCase(),
                     userDetail: {
                         user: username.trim(),
                         identificationCode: merchantCode,
